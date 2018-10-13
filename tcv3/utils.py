@@ -25,13 +25,19 @@ def neuron_step(x: tf.Tensor, channels_in: int, channels_out: int, name: str = '
     with tf.name_scope(name):
         w = tf.Variable(
             tf.random_uniform((channels_in, channels_out), maxval=0.001),
+            # tf.truncated_normal((channels_in, channels_out), stddev=0.1),
             name='weight'
         )
         b = tf.Variable(
             tf.zeros((channels_out,)),
+            # tf.constant(0.1, shape=(channels_out,)),
             name='bias'
         )
-        return tf.matmul(x, w) + b
+        a = tf.sigmoid(tf.matmul(x, w) + b)
+        tf.summary.histogram('weights', w)
+        tf.summary.histogram('biases', b)
+        tf.summary.histogram('activation', a)
+        return a
 
 
 # Help functions.
