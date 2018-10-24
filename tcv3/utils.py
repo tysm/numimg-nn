@@ -23,10 +23,15 @@ def neuron_step(x: tf.Tensor, channels_in: int, channels_out: int, name: str = '
     :return: linear operation on x.
     """
     with tf.name_scope(name):
-        w = tf.Variable(
-            tf.random_uniform((channels_in, channels_out), maxval=0.001),
-            # tf.truncated_normal((channels_in, channels_out), stddev=0.1),
-            name='weight'
+        # w = tf.Variable(
+        #     # tf.random_uniform((channels_in, channels_out), maxval=0.001),
+        #     tf.truncated_normal((channels_in, channels_out), stddev=0.1),
+        #     name='weight'
+        # )
+        w = tf.get_variable(
+            'weight',
+            shape=(channels_in, channels_out),
+            initializer=tf.contrib.layers.xavier_initializer()
         )
         b = tf.Variable(
             tf.zeros((channels_out,)),
@@ -34,10 +39,16 @@ def neuron_step(x: tf.Tensor, channels_in: int, channels_out: int, name: str = '
             name='bias'
         )
         a = tf.sigmoid(tf.matmul(x, w) + b)
-        tf.summary.histogram('weights', w)
-        tf.summary.histogram('biases', b)
-        tf.summary.histogram('activation', a)
+        # tf.summary.histogram('weights', w)
+        # tf.summary.histogram('biases', b)
+        # tf.summary.histogram('activation', a)
         return a
+
+
+def predict_to_file(results: list, paths_to_imgs: list, filename):
+    with open(filename, 'w') as out_file:
+        for i in range(len(results)):
+            out_file.write('{} {}\n'.format(paths_to_imgs[i], results[i]))
 
 
 # Help functions.
@@ -76,7 +87,7 @@ def get_dataset(url: str, filename: str):
 
 
 def load_dataset(path_to_dataset: str, cv2_flag: str = f'IMREAD_GRAYSCALE', x_dtype: np.dtype = np.float32,
-                 y_dtype: np.dtype = np.int64, training_percentage: float = 0.8) -> dict:
+                 y_dtype: np.dtype = np.int64, training_percentage: float = 0.8, seed: int = 7) -> dict:
     """
     Load a dataset in the format:
         "
@@ -95,7 +106,8 @@ def load_dataset(path_to_dataset: str, cv2_flag: str = f'IMREAD_GRAYSCALE', x_dt
     :param cv2_flag: specifies how images should be read.
     :param x_dtype: specifies wich type x values should be.
     :param y_dtype: specifies wich type y values should be.
-    :param training_percentage.
+    :param training_percentage: percentage for the train_set.
+    :param seed: a shuffle seed.
     :return: the dataset.
     """
     x, y = [], []
@@ -113,25 +125,26 @@ def load_dataset(path_to_dataset: str, cv2_flag: str = f'IMREAD_GRAYSCALE', x_dt
         x.extend(acc)
         y.extend([int(label)] * len(acc))
 
-    x, y = shuffle(np.array(x, dtype=x_dtype), np.array(y, dtype=y_dtype))
+    x, y = shuffle(np.array(x, dtype=x_dtype), np.array(y, dtype=y_dtype), random_state=seed)
 
     x_train, y_train = x[:int(len(x) * training_percentage)], y[:int(len(y) * training_percentage)]
     x_valid, y_valid = x[int(len(x) * training_percentage):], y[int(len(y) * training_percentage):]
 
     x_test = []
-    paths_to_test_imgs = []
+    imgnames = []
     path_to_test = os.path.join(path_to_dataset, 'test')
     for imgname in sorted(os.listdir(path_to_test)):
         path_to_img = os.path.join(path_to_test, imgname)
         img = cv2.imread(path_to_img, getattr(cv2, cv2_flag))
 
         x_test.append(img)
-        paths_to_test_imgs.append(path_to_img)
+        imgnames.append(imgname)
+    x_test = np.array(x_test, dtype=x_dtype)
 
     dataset = {
         'classes': classes,
         'train': (x_train, y_train),
         'valid': (x_valid, y_valid),
-        'test': (x_test, paths_to_test_imgs)
+        'test': (x_test, path_to_test, imgnames)
     }
     return dataset

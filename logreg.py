@@ -3,10 +3,7 @@ import time
 
 import numpy as np
 import tensorflow as tf
-from tcv3.utils import neuron_step, eprint, get_dataset, load_dataset
-
-train_writer = tf.summary.FileWriter('/tmp/tcv3/logreg/train')
-valid_writer = tf.summary.FileWriter('/tmp/tcv3/logreg/valid')
+from tcv3.utils import neuron_step, predict_to_file, eprint, get_dataset, load_dataset
 
 datasetname = 'data_part1'
 path_to_dataset = os.path.join(datasetname)
@@ -15,11 +12,19 @@ img_height = 77
 img_width = 71
 img_channels = 1
 
-num_epochs = 186
-log_rate = 100
+num_epochs = 116
+
+log_rate = 20
 write_rate = 5
-high_learning_rate = 0.005
-low_learning_rate = 0.0000001
+
+high_learning_rate = 1
+low_learning_rate = 1
+
+# model = ['adag',  'xv', 'lrh='+str(high_learning_rate), 'lrl='+str(low_learning_rate)]
+model = ['final']
+
+train_writer = tf.summary.FileWriter(os.path.join('logdir/logreg/t', *model))
+valid_writer = tf.summary.FileWriter(os.path.join('logdir/logreg/v', *model))
 
 if __name__ == '__main__':
     if not os.path.exists(path_to_dataset):
@@ -31,13 +36,15 @@ if __name__ == '__main__':
 
     x_train, y_train = dataset['train']
     x_valid, y_valid = dataset['valid']
+    x_test = dataset['test'][0]
 
-    eprint(x_train.shape, y_train.shape, x_valid.shape, y_valid.shape)
+    eprint(x_train.shape, y_train.shape, x_valid.shape, y_valid.shape, x_test.shape)
 
     x_train = x_train.reshape(-1, img_height * img_width * img_channels) / 255
     x_valid = x_valid.reshape(-1, img_height * img_width * img_channels) / 255
+    x_test = x_test.reshape(-1, img_height * img_width * img_channels) / 255
 
-    eprint(x_train.shape, y_train.shape, x_valid.shape, y_valid.shape)
+    eprint(x_train.shape, y_train.shape, x_valid.shape, y_valid.shape, x_test.shape)
 
     graph = tf.Graph()
     with graph.as_default():
@@ -58,7 +65,9 @@ if __name__ == '__main__':
             tf.summary.scalar('loss_function', loss / tf.cast(batch_size, tf.float32))
 
         with tf.name_scope('backward'):
-            train_op = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
+            # train_op = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(loss)
+            # train_op = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
+            train_op = tf.train.AdagradOptimizer(learning_rate=learning_rate).minimize(loss)
             # train_op = tf.train.GradientDescentOptimizer(learning_rate=learning_rate).minimize(loss)
 
         with tf.name_scope('metrics'):
@@ -147,5 +156,7 @@ if __name__ == '__main__':
             epoch(session, x_train, y_train, lr, i)
             evaluation(session, x_valid, y_valid, i)
 
-        train_writer.add_graph(session.graph)
+        predict_to_file(session.run(result, feed_dict={x: x_test}), dataset['test'][2], 'logreg_result.txt')
+
+        # train_writer.add_graph(session.graph)
         valid_writer.add_graph(session.graph)
