@@ -87,7 +87,7 @@ def get_dataset(url: str, filename: str):
 
 
 def load_dataset(path_to_dataset: str, cv2_flag: str = f'IMREAD_GRAYSCALE', x_dtype: np.dtype = np.float32,
-                 y_dtype: np.dtype = np.int64, training_percentage: float = 0.8, seed: int = 7) -> dict:
+                 y_dtype: np.dtype = np.int64, training_percentage: float = 0.8, seed: int = 7, resize_img: (int, int) = None) -> dict:
     """
     Load a dataset in the format:
         "
@@ -108,6 +108,7 @@ def load_dataset(path_to_dataset: str, cv2_flag: str = f'IMREAD_GRAYSCALE', x_dt
     :param y_dtype: specifies wich type y values should be.
     :param training_percentage: percentage for the train_set.
     :param seed: a shuffle seed.
+    :param resize_img: resize (img_width, img_height)
     :return: the dataset.
     """
     x, y = [], []
@@ -119,6 +120,9 @@ def load_dataset(path_to_dataset: str, cv2_flag: str = f'IMREAD_GRAYSCALE', x_dt
         for imgname in sorted(os.listdir(path_to_label)):
             path_to_img = os.path.join(path_to_label, imgname)
             img = cv2.imread(path_to_img, getattr(cv2, cv2_flag))
+
+            if resize_img is not None:
+                img = cv2.resize(img, resize_img)
 
             acc.append(img)
 
@@ -137,6 +141,9 @@ def load_dataset(path_to_dataset: str, cv2_flag: str = f'IMREAD_GRAYSCALE', x_dt
         path_to_img = os.path.join(path_to_test, imgname)
         img = cv2.imread(path_to_img, getattr(cv2, cv2_flag))
 
+        if resize_img is not None:
+            img = cv2.resize(img, resize_img)
+
         x_test.append(img)
         imgnames.append(imgname)
     x_test = np.array(x_test, dtype=x_dtype)
@@ -148,3 +155,14 @@ def load_dataset(path_to_dataset: str, cv2_flag: str = f'IMREAD_GRAYSCALE', x_dt
         'test': (x_test, path_to_test, imgnames)
     }
     return dataset
+
+
+def read_mirror_imgs():
+    arrays = []
+    with open('mirror_imgs', 'r') as data:
+        for array in data:
+            array = np.fromstring(array.strip('\n'), dtype=np.uint8)
+            array[array == 49] = 255
+            array[array == 48] = 0
+            arrays.append(array.reshape((5, 3, 1)))
+    return arrays

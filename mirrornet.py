@@ -3,34 +3,41 @@ import time
 
 import numpy as np
 import tensorflow as tf
-from tcv3.utils import neuron_step, predict_to_file, eprint, get_dataset, load_dataset
+from tcv3.utils import predict_to_file, eprint, get_dataset, load_dataset
 
 datasetname = 'data_part1'
 path_to_dataset = os.path.join(datasetname)
 
-img_height = 77
-img_width = 71
+img_height = 64
+img_width = 64
 img_channels = 1
 
-num_epochs = 116
+mirror_img_height = 5
+mirror_img_width = 3
+mirror_img_channels = 1
+
+num_epochs = 111
 
 log_rate = 20
 write_rate = 5
 
 high_learning_rate = 1
-low_learning_rate = 1
+low_learning_rate = 0.85
 
-# model = ['adag',  'xv', 'lrh='+str(high_learning_rate), 'lrl='+str(low_learning_rate)]
+# num_neural_units = 1024
+num_neural_units = 512
+
+# model = ['gd',  'dpout', 'xv', 'lrh='+str(high_learning_rate), 'lrl='+str(low_learning_rate), 'nu='+str(num_neural_units)]
 model = ['final']
 
-train_writer = tf.summary.FileWriter(os.path.join('logdir/logreg/t', *model))
-valid_writer = tf.summary.FileWriter(os.path.join('logdir/logreg/v', *model))
+train_writer = tf.summary.FileWriter(os.path.join('logdir/conv/t', *model))
+valid_writer = tf.summary.FileWriter(os.path.join('logdir/conv/v', *model))
 
 if __name__ == '__main__':
     if not os.path.exists(path_to_dataset):
         eprint(path_to_dataset, 'not found')
         get_dataset('https://maups.github.io/tcv3/%s.tar.bz2' % datasetname, os.path.join('%s.tar.bz2' % datasetname))
-    dataset = load_dataset(path_to_dataset)
+    dataset = load_dataset(path_to_dataset, resize_img=(img_width, img_height))
 
     classes = dataset['classes']
 
@@ -40,8 +47,11 @@ if __name__ == '__main__':
 
     eprint(x_train.shape, y_train.shape, x_valid.shape, y_valid.shape, x_test.shape)
 
+    # x_train = x_train.reshape(-1, img_height * img_width * img_channels) / 255
     x_train = x_train.reshape(-1, img_height, img_width, img_channels) / 255
+    # x_valid = x_valid.reshape(-1, img_height * img_width * img_channels) / 255
     x_valid = x_valid.reshape(-1, img_height, img_width, img_channels) / 255
+    # x_test = x_test.reshape(-1, img_height * img_width * img_channels) / 255
     x_test = x_test.reshape(-1, img_height, img_width, img_channels) / 255
 
     eprint(x_train.shape, y_train.shape, x_valid.shape, y_valid.shape, x_test.shape)
@@ -50,49 +60,79 @@ if __name__ == '__main__':
     with graph.as_default():
         with tf.name_scope('input'):
             x = tf.placeholder(tf.float32, shape=(None, img_height, img_width, img_channels), name='features')
+
             y = tf.placeholder(tf.int64, shape=(None,), name='labels')
-            one_hot_y = tf.one_hot(y, len(classes), name='one_hot_labels')
+            y_one_hot = tf.one_hot(y, len(classes), name='labels_one_hot')
+
+            training_boolean = tf.placeholder(tf.bool, name='training_boolean')
             learning_rate = tf.placeholder(tf.float32, name='learning_rate')
             batch_size = tf.placeholder(tf.int64, name='batch_size')
 
-        with tf.name_scope('filters'):
-            conv1 = tf.layers.conv2d(
+        with tf.name_scope('resize'):
+            pool = tf.layers.max_pooling2d(
                 x,
-                64,
-                (5, 5),
-                (2, 2),
-                activation=tf.nn.relu,
-                name='conv1',
-                kernel_initializer=tf.contrib.layers.xavier_initializer()
+                pool_size=(2, 2),
+                strides=(2, 2)
             )
-            pool1 = tf.layers.max_pooling2d(conv1, (2, 2), (2, 2), name='pool1')
+            eprint('pool:', pool.shape)
+
+        with tf.name_scope('pre_hidden'):
+            conv1 = tf.layers.conv2d(
+                pool,
+                32,
+                (8, 8),
+                strides=(2, 2),
+                padding='same',
+                activation=tf.nn.relu
+            )
+            eprint('conv1:', conv1.shape)
+            pool1 = tf.layers.max_pooling2d(conv1, (2, 2), (2, 2))
+            eprint('pool1:', pool1.shape)
+            # pool_dpout1 = tf.layers.dropout(pool1, training=training_boolean)
+            # eprint('pool_dpout1:', pool_dpout1.shape)
+
             conv2 = tf.layers.conv2d(
                 pool1,
-                128,
-                (3, 3),
+                64,
                 (2, 2),
+                strides=(2, 2),
+                padding='same',
                 activation=tf.nn.relu,
-                name='conv2',
-                kernel_initializer=tf.contrib.layers.xavier_initializer()
             )
-            pool1 = tf.layers.max_pooling2d(conv2, (2, 2), (2, 2), name='pool2')
+            eprint('conv2:', conv2.shape)
+            pool2 = tf.layers.max_pooling2d(conv2, (2, 2), (2, 2))
+            eprint('pool2:', pool2.shape)
+            # pool_dpout2 = tf.layers.dropout(pool2, rate=0.2, training=training_boolean)
+            # eprint('pool_dpout1:', pool_dpout2.shape)
 
-            applied_filter = tf.reshape(pool1, (-1, pool1.shape[1]*pool1.shape[2]*pool1.shape[3]))
+            proc_x = tf.layers.Flatten()(pool2)
+            eprint('preproc_x:', proc_x.shape)
 
         with tf.name_scope('forward'):
-            out = neuron_step(applied_filter, pool1.shape[1]*pool1.shape[2]*pool1.shape[3], len(classes))
-            loss = tf.reduce_mean(
-                tf.losses.softmax_cross_entropy(one_hot_y, out),
-                name='loss'
+            fc1 = tf.layers.dense(
+                proc_x,
+                num_neural_units,
+                activation=tf.nn.relu,
+                kernel_initializer=tf.contrib.layers.xavier_initializer(),
+                name='hidden'
             )
+            dpout = tf.layers.dropout(fc1, rate=0.6, training=training_boolean)
+            out = tf.layers.dense(
+                dpout,
+                len(classes),
+                activation=tf.nn.sigmoid,
+                kernel_initializer=tf.contrib.layers.xavier_initializer(),
+                name='out'
+            )
+            loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(y_one_hot, out))
 
             tf.summary.scalar('loss_function', loss / tf.cast(batch_size, tf.float32))
 
         with tf.name_scope('backward'):
             # train_op = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(loss)
             # train_op = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
-            train_op = tf.train.AdagradOptimizer(learning_rate=learning_rate).minimize(loss)
-            # train_op = tf.train.GradientDescentOptimizer(learning_rate=learning_rate).minimize(loss)
+            # train_op = tf.train.AdagradOptimizer(learning_rate=learning_rate).minimize(loss)
+            train_op = tf.train.GradientDescentOptimizer(learning_rate=learning_rate).minimize(loss)
 
         with tf.name_scope('metrics'):
             result = tf.argmax(out, 1)
@@ -118,6 +158,7 @@ if __name__ == '__main__':
                 feed_dict={
                     x: x_batch,
                     y: y_batch,
+                    training_boolean: True,
                     learning_rate: input_learning_rate
                 }
             )
@@ -130,6 +171,7 @@ if __name__ == '__main__':
                 feed_dict={
                     x: input_x,
                     y: input_y,
+                    training_boolean: True,
                     batch_size: input_x.shape[0]
                 }
             )
@@ -150,7 +192,8 @@ if __name__ == '__main__':
                 [loss, accuracy],
                 feed_dict={
                     x: input_x[i:i + input_batch_size],
-                    y: input_y[i:i + input_batch_size]
+                    y: input_y[i:i + input_batch_size],
+                    training_boolean: False
                 }
             )
             valid_loss += ret[0] * min(input_batch_size, len(input_x) - i)
@@ -162,6 +205,7 @@ if __name__ == '__main__':
                 feed_dict={
                     x: input_x,
                     y: input_y,
+                    training_boolean: False,
                     batch_size: input_x.shape[0]
                 }
             )
@@ -173,14 +217,17 @@ if __name__ == '__main__':
 
 
     with tf.Session(graph=graph) as session:
+        eprint('Inicializando variáveis...')
         session.run(tf.global_variables_initializer())
 
+
+        eprint('Rodando as épocas...')
         for i in range(num_epochs):
             lr = (high_learning_rate * (num_epochs - i - 1) + low_learning_rate * i) / (num_epochs - 1)
             epoch(session, x_train, y_train, lr, i)
             evaluation(session, x_valid, y_valid, i)
 
-        predict_to_file(session.run(result, feed_dict={x: x_test}), dataset['test'][2], 'logreg_result.txt')
+        predict_to_file(session.run(result, feed_dict={x: x_test, training_boolean: False}), dataset['test'][2], 'mirrornet_result.txt')
 
         # train_writer.add_graph(session.graph)
         valid_writer.add_graph(session.graph)
