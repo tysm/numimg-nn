@@ -165,17 +165,17 @@ if __name__ == '__main__':
             train_loss += ret[1] * min(input_batch_size, len(input_x) - i)
             train_accuracy += ret[2]
 
-        if iter_idx % write_rate == 0:
-            ret = session.run(
-                merged_summary,
-                feed_dict={
-                    x: input_x,
-                    y: input_y,
-                    training_boolean: True,
-                    batch_size: input_x.shape[0]
-                }
-            )
-            train_writer.add_summary(ret, iter_idx)
+        # if iter_idx % write_rate == 0:
+        #     ret = session.run(
+        #         merged_summary,
+        #         feed_dict={
+        #             x: input_x,
+        #             y: input_y,
+        #             training_boolean: True,
+        #             batch_size: input_x.shape[0]
+        #         }
+        #     )
+        #     train_writer.add_summary(ret, iter_idx)
 
         if iter_idx % log_rate == 0:
             eprint('epoch:', iter_idx, 'lr:', input_learning_rate, 'time: %.5f' % (time.time() - start),
@@ -199,17 +199,17 @@ if __name__ == '__main__':
             valid_loss += ret[0] * min(input_batch_size, len(input_x) - i)
             valid_accuracy += ret[1]
 
-        if iter_idx % write_rate == 0:
-            ret = session.run(
-                merged_summary,
-                feed_dict={
-                    x: input_x,
-                    y: input_y,
-                    training_boolean: False,
-                    batch_size: input_x.shape[0]
-                }
-            )
-            valid_writer.add_summary(ret, iter_idx)
+        # if iter_idx % write_rate == 0:
+        #     ret = session.run(
+        #         merged_summary,
+        #         feed_dict={
+        #             x: input_x,
+        #             y: input_y,
+        #             training_boolean: False,
+        #             batch_size: input_x.shape[0]
+        #         }
+        #     )
+        #     valid_writer.add_summary(ret, iter_idx)
 
         if iter_idx % log_rate == 0:
             print('evaluation:', iter_idx, 'time: %.5f' % (time.time() - start),
@@ -227,7 +227,7 @@ if __name__ == '__main__':
             epoch(session, x_train, y_train, lr, i)
             evaluation(session, x_valid, y_valid, i)
 
-        predict_to_file(session.run(result, feed_dict={x: x_test, training_boolean: False}), dataset['test'][2], 'mirrornet_result.txt')
+        predict_to_file(session.run(result, feed_dict={x: x_test, training_boolean: False}), dataset['test'][2], 'result.txt')
 
         # train_writer.add_graph(session.graph)
         valid_writer.add_graph(session.graph)
