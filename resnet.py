@@ -12,7 +12,7 @@ img_height = 64
 img_width = 64
 img_channels = 1
 
-num_epochs = 16
+num_epochs = 2
 
 log_rate = 5
 write_rate = 5
@@ -216,18 +216,6 @@ if __name__ == '__main__':
         eprint('Inicializando variáveis...')
         session.run(tf.global_variables_initializer())
 
-
-        eprint('Rodando as épocas...')
-        for i in range(num_epochs):
-            lr = (high_learning_rate * (num_epochs - i - 1) + low_learning_rate * i) / (num_epochs - 1)
-            epoch(session, x_train, y_train, lr, i)
-            evaluation(session, x_valid, y_valid, i)
-
-        # predict_to_file(session.run(result, feed_dict={x: x_test, training_boolean: False}), dataset['test'][2], 'result.txt')
-
-        # train_writer.add_graph(session.graph)
-        # valid_writer.add_graph(session.graph)
-
         tf_saver = tf.train.Saver()
-        tf_saver.save(session, 'models/cnn-mnist.ckpt')
-
+        tf_saver.restore(session, 'models/cnn-mnist.ckpt')
+        print(session.run([result], feed_dict={x: x_test[0:1], training_boolean: False}))
