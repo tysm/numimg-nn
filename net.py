@@ -12,10 +12,10 @@ img_height = 64
 img_width = 64
 img_channels = 1
 
-num_epochs = 16
+num_epochs = 12
 
-log_rate = 5
-write_rate = 5
+log_rate = 1
+# write_rate = 5
 
 high_learning_rate = 0.5
 low_learning_rate = 0.4
@@ -33,7 +33,7 @@ if __name__ == '__main__':
     if not os.path.exists(path_to_dataset):
         eprint(path_to_dataset, 'not found')
         get_dataset('https://maups.github.io/tcv3/%s.tar.bz2' % datasetname, os.path.join('%s.tar.bz2' % datasetname))
-    dataset = load_dataset(path_to_dataset, resize_img=(img_width, img_height), perform_augmentation=False)
+    dataset = load_dataset(path_to_dataset, resize_img=(img_width, img_height), perform_augmentation=True)
 
     classes = dataset['classes']
 
@@ -64,17 +64,17 @@ if __name__ == '__main__':
             learning_rate = tf.placeholder(tf.float32, name='learning_rate')
             batch_size = tf.placeholder(tf.int64, name='batch_size')
 
-        with tf.name_scope('resize'):
-            pool = tf.layers.max_pooling2d(
-                x,
-                pool_size=(2, 2),
-                strides=(2, 2)
-            )
-            eprint('pool:', pool.shape)
+        # with tf.name_scope('resize'):
+        #     pool = tf.layers.max_pooling2d(
+        #         x,
+        #         pool_size=(2, 2),
+        #         strides=(2, 2)
+        #     )
+        #     eprint('pool:', pool.shape)
 
         with tf.name_scope('pre_hidden'):
             conv1 = tf.layers.conv2d(
-                pool,
+                x,
                 32,
                 (8, 8),
                 strides=(2, 2),
@@ -112,7 +112,7 @@ if __name__ == '__main__':
                 kernel_initializer=tf.contrib.layers.xavier_initializer(),
                 name='hidden'
             )
-            dpout = tf.layers.dropout(fc1, rate=0.6, training=training_boolean)
+            dpout = tf.layers.dropout(fc1, rate=0.7, training=training_boolean)
             out = tf.layers.dense(
                 dpout,
                 len(classes),
@@ -174,8 +174,10 @@ if __name__ == '__main__':
         #     train_writer.add_summary(ret, iter_idx)
 
         if iter_idx % log_rate == 0:
-            eprint('epoch:', iter_idx, 'lr:', input_learning_rate, 'time: %.5f' % (time.time() - start),
-                   'accuracy: %.5f' % (train_accuracy / len(input_x)), 'loss: %.5f' % (train_loss / len(input_x)))
+            eprint('epch: %03d' % iter_idx, 'time: %.5f' % (time.time() - start), 
+                   'accuracy: %.5f' % (train_accuracy / len(input_x)),
+                   'loss: %.5f' % (train_loss / len(input_x)),
+                   'lr:', input_learning_rate)
 
 
     def evaluation(session: tf.Session, input_x: np.ndarray, input_y: np.ndarray, iter_idx: int,
@@ -208,8 +210,9 @@ if __name__ == '__main__':
         #     valid_writer.add_summary(ret, iter_idx)
 
         if iter_idx % log_rate == 0:
-            print('evaluation:', iter_idx, 'time: %.5f' % (time.time() - start),
-                  'accuracy: %.5f' % (valid_accuracy / len(input_x)), 'loss: %.5f' % (valid_loss / len(input_x)))
+            eprint('eval: %03d' % iter_idx, 'time: %.5f' % (time.time() - start),
+                  'accuracy: %.5f' % (valid_accuracy / len(input_x)),
+                  'loss: %.5f' % (valid_loss / len(input_x)))
 
 
     with tf.Session(graph=graph) as session:

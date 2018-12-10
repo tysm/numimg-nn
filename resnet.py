@@ -12,10 +12,10 @@ img_height = 64
 img_width = 64
 img_channels = 1
 
-num_epochs = 2
+num_epochs = 12
 
-log_rate = 5
-write_rate = 5
+log_rate = 1
+# write_rate = 5
 
 high_learning_rate = 0.5
 low_learning_rate = 0.4
@@ -64,17 +64,17 @@ if __name__ == '__main__':
             learning_rate = tf.placeholder(tf.float32, name='learning_rate')
             batch_size = tf.placeholder(tf.int64, name='batch_size')
 
-        with tf.name_scope('resize'):
-            pool = tf.layers.max_pooling2d(
-                x,
-                pool_size=(2, 2),
-                strides=(2, 2)
-            )
-            eprint('pool:', pool.shape)
+        # with tf.name_scope('resize'):
+        #     pool = tf.layers.max_pooling2d(
+        #         x,
+        #         pool_size=(2, 2),
+        #         strides=(2, 2)
+        #     )
+        #     eprint('pool:', pool.shape)
 
         with tf.name_scope('pre_hidden'):
             conv1 = tf.layers.conv2d(
-                pool,
+                x,
                 32,
                 (8, 8),
                 strides=(2, 2),
@@ -112,7 +112,7 @@ if __name__ == '__main__':
                 kernel_initializer=tf.contrib.layers.xavier_initializer(),
                 name='hidden'
             )
-            dpout = tf.layers.dropout(fc1, rate=0.6, training=training_boolean)
+            dpout = tf.layers.dropout(fc1, rate=0.7, training=training_boolean)
             out = tf.layers.dense(
                 dpout,
                 len(classes),
@@ -133,84 +133,6 @@ if __name__ == '__main__':
         with tf.name_scope('metrics'):
             result = tf.argmax(out, 1)
             accuracy = tf.reduce_sum(tf.cast(tf.equal(result, y), tf.float32), name='accuracy')
-
-            # tf.summary.scalar('accuracy_metric', accuracy / tf.cast(batch_size, tf.float32))
-        # merged_summary = tf.summary.merge_all()
-
-
-    def epoch(session: tf.Session, input_x: np.ndarray, input_y: np.ndarray, input_learning_rate: float, iter_idx: int,
-              input_batch_size: int = 32):
-        batch = np.random.permutation(len(input_x))
-
-        train_loss = 0.0
-        train_accuracy = 0.0
-        start = time.time()
-        for i in range(0, len(input_x), input_batch_size):
-            x_batch = input_x.take(batch[i:i + input_batch_size], axis=0)
-            y_batch = input_y.take(batch[i:i + input_batch_size], axis=0)
-
-            ret = session.run(
-                [train_op, loss, accuracy],
-                feed_dict={
-                    x: x_batch,
-                    y: y_batch,
-                    training_boolean: True,
-                    learning_rate: input_learning_rate
-                }
-            )
-            train_loss += ret[1] * min(input_batch_size, len(input_x) - i)
-            train_accuracy += ret[2]
-
-        # if iter_idx % write_rate == 0:
-        #     ret = session.run(
-        #         merged_summary,
-        #         feed_dict={
-        #             x: input_x,
-        #             y: input_y,
-        #             training_boolean: True,
-        #             batch_size: input_x.shape[0]
-        #         }
-        #     )
-        #     train_writer.add_summary(ret, iter_idx)
-
-        if iter_idx % log_rate == 0:
-            eprint('epoch:', iter_idx, 'lr:', input_learning_rate, 'time: %.5f' % (time.time() - start),
-                   'accuracy: %.5f' % (train_accuracy / len(input_x)), 'loss: %.5f' % (train_loss / len(input_x)))
-
-
-    def evaluation(session: tf.Session, input_x: np.ndarray, input_y: np.ndarray, iter_idx: int,
-                   input_batch_size: int = 32):
-        valid_loss = 0.0
-        valid_accuracy = 0.0
-        start = time.time()
-        for i in range(0, len(input_x), input_batch_size):
-            ret = session.run(
-                [loss, accuracy],
-                feed_dict={
-                    x: input_x[i:i + input_batch_size],
-                    y: input_y[i:i + input_batch_size],
-                    training_boolean: False
-                }
-            )
-            valid_loss += ret[0] * min(input_batch_size, len(input_x) - i)
-            valid_accuracy += ret[1]
-
-        # if iter_idx % write_rate == 0:
-        #     ret = session.run(
-        #         merged_summary,
-        #         feed_dict={
-        #             x: input_x,
-        #             y: input_y,
-        #             training_boolean: False,
-        #             batch_size: input_x.shape[0]
-        #         }
-        #     )
-        #     valid_writer.add_summary(ret, iter_idx)
-
-        if iter_idx % log_rate == 0:
-            print('evaluation:', iter_idx, 'time: %.5f' % (time.time() - start),
-                  'accuracy: %.5f' % (valid_accuracy / len(input_x)), 'loss: %.5f' % (valid_loss / len(input_x)))
-
 
     with tf.Session(graph=graph) as session:
         eprint('Inicializando variáveis...')

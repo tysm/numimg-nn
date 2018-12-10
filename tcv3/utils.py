@@ -132,52 +132,56 @@ def load_dataset(path_to_dataset: str, cv_flag: str=f'IMREAD_GRAYSCALE', x_dtype
         x.extend(acc)
         y.extend([int(label)] * len(acc))
 
+    # x, y = shuffle(np.array(x, dtype=x_dtype), np.array(y, dtype=y_dtype), random_state=seed)
+    x, y = shuffle(x, y, random_state=seed)
+
+    x_train, y_train = x[:int(len(x) * training_percentage)], y[:int(len(y) * training_percentage)]
+    x_valid, y_valid = x[int(len(x) * training_percentage):], y[int(len(y) * training_percentage):]
+
     if perform_augmentation:
-        rows, cols = x[0].shape[:2]
+        rows, cols = x_train[0].shape[:2]
 
         M = cv.getRotationMatrix2D(((cols-1)/2.0, (rows-1)/2.0), 0, 1.10)
-        scaling_imgs = - len(x)
-        for i in range(len(x)):
-            img = cv.warpAffine(x[i], M, (cols, rows))
+        scaling_imgs = - len(x_train)
+        for i in range(len(x_train)):
+            img = cv.warpAffine(x_train[i], M, (cols, rows))
             if not is_valid_img(img):
                 continue
-            x.append(img)
-            y.append(y[i])
-        scaling_imgs += len(x)
+            x_train.append(img)
+            y_train.append(y_train[i])
+        scaling_imgs += len(x_train)
         eprint('scaling_imgs={}'.format(scaling_imgs))
 
         clock_M = cv.getRotationMatrix2D(((cols-1)/2.0, (rows-1)/2.0), -5, 1)
         anti_M = cv.getRotationMatrix2D(((cols-1)/2.0, (rows-1)/2.0), 5, 1)
-        rotated_imgs = - len(x)
-        for i in range(len(x)):
-            img = cv.warpAffine(x[i], clock_M, (cols, rows))
+        rotated_imgs = - len(x_train)
+        for i in range(len(x_train)):
+            img = cv.warpAffine(x_train[i], clock_M, (cols, rows))
             if is_valid_img(img):
-                x.append(img)
-                y.append(y[i])
+                x_train.append(img)
+                y_train.append(y_train[i])
 
-            img = cv.warpAffine(x[i], anti_M, (cols, rows))
+            img = cv.warpAffine(x_train[i], anti_M, (cols, rows))
             if not is_valid_img(img):
                 continue
-            x.append(img)
-            y.append(y[i])
-        rotated_imgs += len(x)
+            x_train.append(img)
+            y_train.append(y_train[i])
+        rotated_imgs += len(x_train)
         eprint('rotated_imgs={}'.format(rotated_imgs))
 
         M = np.float32([[1, 0, 0], [0, 1, 4]])
-        translated_imgs = - len(x)
-        for i in range(len(x)):
-            img = cv.warpAffine(x[i], M, (cols, rows))
+        translated_imgs = - len(x_train)
+        for i in range(len(x_train)):
+            img = cv.warpAffine(x_train[i], M, (cols, rows))
             if not is_valid_img(img):
                 continue
-            x.append(img)
-            y.append(y[i])
-        translated_imgs += len(x)
+            x_train.append(img)
+            y_train.append(y_train[i])
+        translated_imgs += len(x_train)
         eprint('translated_imgs={}'.format(translated_imgs))
 
-    x, y = shuffle(np.array(x, dtype=x_dtype), np.array(y, dtype=y_dtype), random_state=seed)
-
-    x_train, y_train = x[:int(len(x) * training_percentage)], y[:int(len(y) * training_percentage)]
-    x_valid, y_valid = x[int(len(x) * training_percentage):], y[int(len(y) * training_percentage):]
+    x_train, y_train = np.array(x_train, dtype=x_dtype), np.array(y_train, dtype=y_dtype)
+    x_valid, y_valid = np.array(x_valid, dtype=x_dtype), np.array(y_valid, dtype=y_dtype)
 
     x_test = []
     imgnames = []
