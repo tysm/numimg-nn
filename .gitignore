@@ -475,3 +475,6 @@ pip-selfcheck.json
 # Dataset archives:
 data_part*
 *.txt
+
+# Stuff
+.idea/
