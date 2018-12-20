@@ -17,10 +17,10 @@ def lrelu(x, alpha=0.2):
     return tf.maximum(x, tf.multiply(x, alpha))
 
 
-def generator(noise, is_training, reuse=False):
+def generator(noise, dp_rate, is_training, reuse=False):
     with tf.variable_scope('GEN', reuse=reuse):
         fc = tf.layers.dense(noise, 4*4*512, activation=lrelu)
-        dp = tf.layers.dropout(fc, training=is_training)
+        dp = tf.layers.dropout(fc, dp_rate, training=is_training)
         norm = tf.layers.batch_normalization(dp, training=is_training)
 
         x = tf.reshape(norm, (-1, 4, 4, 512))
@@ -33,7 +33,7 @@ def generator(noise, is_training, reuse=False):
             padding='same',
             activation=lrelu
         )
-        dp = tf.layers.dropout(conv, training=is_training)
+        dp = tf.layers.dropout(conv, dp_rate, training=is_training)
         norm = tf.layers.batch_normalization(dp, training=is_training)
 
         conv = tf.layers.conv2d_transpose(
@@ -44,7 +44,7 @@ def generator(noise, is_training, reuse=False):
             padding='same',
             activation=lrelu
         )
-        dp = tf.layers.dropout(conv, training=is_training)
+        dp = tf.layers.dropout(conv, dp_rate, training=is_training)
         norm = tf.layers.batch_normalization(dp, training=is_training)
 
         conv = tf.layers.conv2d_transpose(
@@ -55,7 +55,7 @@ def generator(noise, is_training, reuse=False):
             padding='same',
             activation=lrelu
         )
-        dp = tf.layers.dropout(conv, training=is_training)
+        dp = tf.layers.dropout(conv, dp_rate, training=is_training)
         norm = tf.layers.batch_normalization(dp, training=is_training)
 
         imgs = tf.layers.conv2d_transpose(
@@ -68,7 +68,7 @@ def generator(noise, is_training, reuse=False):
     return imgs
 
 
-def discriminator(x, is_training, reuse=False):
+def discriminator(x, dp_rate, is_training, reuse=False):
     with tf.variable_scope('DIS', reuse=reuse):
         conv = tf.layers.conv2d(
             x,
@@ -78,7 +78,7 @@ def discriminator(x, is_training, reuse=False):
             padding='same',
             activation=lrelu
         )
-        dp = tf.layers.dropout(conv, training=is_training)
+        dp = tf.layers.dropout(conv, dp_rate, training=is_training)
 
         conv = tf.layers.conv2d(
             dp,
@@ -87,7 +87,7 @@ def discriminator(x, is_training, reuse=False):
             padding='same',
             activation=lrelu
         )
-        dp = tf.layers.dropout(conv, training=is_training)
+        dp = tf.layers.dropout(conv, dp_rate, training=is_training)
 
         conv = tf.layers.conv2d(
             dp,
@@ -96,7 +96,7 @@ def discriminator(x, is_training, reuse=False):
             padding='same',
             activation=lrelu
         )
-        dp = tf.layers.dropout(conv, training=is_training)
+        dp = tf.layers.dropout(conv, dp_rate, training=is_training)
 
         flat = tf.layers.flatten(dp)
         fc = tf.layers.dense(flat, 128, activation=lrelu)
