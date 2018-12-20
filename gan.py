@@ -16,8 +16,6 @@ with graph.as_default():
     x = tf.placeholder(tf.float32, (None, num_features))
     y = tf.placeholder(tf.float32, (None, img_height, img_width, img_channels))
 
-    batch_size = tf.placeholder(tf.int64)
-
     is_training = tf.placeholder(tf.bool)
     learning_rate = tf.placeholder(tf.float32)
 
@@ -29,19 +27,17 @@ with graph.as_default():
     df_labels = discriminator(gimgs, is_training)
     dt_labels = discriminator(y, is_training, reuse=True)
 
-    f_labels = tf.zeros((batch_size))
-    t_labels = tf.ones((batch_size))
-
     gvars = [v for v in tf.global_variables() if v.name.startswith('GEN')]
     dvars = [v for v in tf.global_variables() if v.name.startswith('DIS')]
 
-    f_loss = tf.reduce_mean(tf.reduce_sum(tf.losses.log_loss(f_labels, df_labels)))
-    t_loss = tf.reduce_mean(tf.reduce_sum(tf.losses.log_loss(t_labels, dt_labels)))
-    dloss = tf.add(f_loss, t_loss)
-    gloss = tf.negative(dloss)
+    f_loss = tf.losses.log_loss(tf.zeros_like(df_labels), df_labels)
+    t_loss = tf.losses.log_loss(tf.ones_like(dt_labels), dt_labels)
 
-    gtrain_op = tf.train.AdamOptimizer(learning_rate).minimize(gloss, var_list=gvars)
-    dtrain_op = tf.train.AdamOptimizer(learning_rate).minimize(dloss, var_list=dvars)
+    gloss = tf.reduce_mean(tf.losses.log_loss(tf.ones_like(df_labels), df_labels))
+    dloss = tf.reduce_mean(0.5 * (f_loss + t_loss))
+
+    gtrain_op = tf.train.RMSPropOptimizer(learning_rate).minimize(gloss, var_list=gvars)
+    dtrain_op = tf.train.RMSPropOptimizer(learning_rate).minimize(dloss, var_list=dvars)
 
 
 def train(sess, ix, iy, lr, epoch, bs=16):
@@ -59,7 +55,6 @@ def train(sess, ix, iy, lr, epoch, bs=16):
                 y: by,
                 is_training: True,
                 learning_rate: lr,
-                batch_size: bs
             }
         )
         _dloss += ret[1] * min(bs, len(ix) - i)
@@ -71,7 +66,6 @@ def train(sess, ix, iy, lr, epoch, bs=16):
                 y: by,
                 is_training: True,
                 learning_rate: lr,
-                batch_size: bs
             }
         )
         _gloss += ret[1] * min(bs, len(ix) - i)
@@ -98,4 +92,4 @@ with tf.Session(graph=graph) as session:
     print('Done')
 
     for epoch in range(num_epochs):
-        train(session, datax, datay, 0.5, epoch)
+        train(session, datax, datay, 0.00015, epoch)

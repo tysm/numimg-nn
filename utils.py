@@ -13,44 +13,55 @@ from sklearn.utils import shuffle
 
 # ML functions.
 
+def lrelu(x, alpha=0.2):
+    return tf.maximum(x, tf.multiply(x, alpha))
+
+
 def generator(noise, is_training, reuse=False):
     with tf.variable_scope('GEN', reuse=reuse):
-        fc = tf.layers.dense(
-            noise,
-            4*4*512,
-            activation=tf.nn.relu,
-            kernel_initializer=tf.contrib.layers.xavier_initializer()
-        )
-        dp = tf.layers.dropout(fc, rate=0.2, training=is_training)
+        fc = tf.layers.dense(noise, 4*4*512, activation=lrelu)
+        dp = tf.layers.dropout(fc, training=is_training)
+        norm = tf.layers.batch_normalization(dp, training=is_training)
 
-        x = tf.reshape(dp, (-1, 4, 4, 512))
-        norm = tf.layers.batch_normalization(x, training=is_training)
+        x = tf.reshape(norm, (-1, 4, 4, 512))
 
         conv = tf.layers.conv2d_transpose(
-            norm,
-            256,
+            x,
+            64,
             5,
             strides=2,
             padding='same',
-            activation=tf.nn.relu
+            activation=lrelu
         )
-        norm = tf.layers.batch_normalization(conv, training=is_training)
+        dp = tf.layers.dropout(conv, training=is_training)
+        norm = tf.layers.batch_normalization(dp, training=is_training)
 
         conv = tf.layers.conv2d_transpose(
             norm,
-            128,
+            64,
             5,
             strides=2,
             padding='same',
-            activation=tf.nn.relu
+            activation=lrelu
         )
-        norm = tf.layers.batch_normalization(conv, training=is_training)
+        dp = tf.layers.dropout(conv, training=is_training)
+        norm = tf.layers.batch_normalization(dp, training=is_training)
+
+        conv = tf.layers.conv2d_transpose(
+            norm,
+            64,
+            5,
+            strides=2,
+            padding='same',
+            activation=lrelu
+        )
+        dp = tf.layers.dropout(conv, training=is_training)
+        norm = tf.layers.batch_normalization(dp, training=is_training)
 
         imgs = tf.layers.conv2d_transpose(
             norm,
             1,
             5,
-            strides=2,
             padding='same',
             activation=tf.nn.sigmoid
         )
@@ -65,37 +76,31 @@ def discriminator(x, is_training, reuse=False):
             5,
             strides=2,
             padding='same',
-            activation=tf.nn.relu
+            activation=lrelu
         )
-        norm = tf.layers.batch_normalization(conv, training=is_training)
+        dp = tf.layers.dropout(conv, training=is_training)
 
         conv = tf.layers.conv2d(
-            norm,
-            128,
+            dp,
+            64,
             5,
-            strides=2,
             padding='same',
-            activation=tf.nn.relu
+            activation=lrelu
         )
-        norm = tf.layers.batch_normalization(conv, training=is_training)
+        dp = tf.layers.dropout(conv, training=is_training)
 
         conv = tf.layers.conv2d(
-            norm,
-            256,
+            dp,
+            64,
             5,
-            strides=2,
             padding='same',
-            activation=tf.nn.relu
+            activation=lrelu
         )
-        norm = tf.layers.batch_normalization(conv, training=is_training)
+        dp = tf.layers.dropout(conv, training=is_training)
 
-        flat = tf.reshape(norm, (-1, 4*4*256))
-        out = tf.layers.dense(
-            flat,
-            1,
-            activation=tf.sigmoid,
-            kernel_initializer=tf.contrib.layers.xavier_initializer()
-        )
+        flat = tf.layers.flatten(dp)
+        fc = tf.layers.dense(flat, 128, activation=lrelu)
+        out = tf.layers.dense(fc, 1, activation=tf.sigmoid)
     return out
 
 
