@@ -1,63 +1,101 @@
-import random
+import time
 
+import numpy as np
 import tensorflow as tf
 
+from utils import generator, discriminator, eprint, get_dataset, load_dataset
+
+num_epochs = 21
+log_rate = 1
 
 num_features = 64
 img_height, img_width, img_channels = (32, 32, 1)
-random_seed = random.randint(1, 101)
 
 graph = tf.Graph()
 with graph.as_default():
     x = tf.placeholder(tf.float32, (None, num_features))
     y = tf.placeholder(tf.float32, (None, img_height, img_width, img_channels))
 
-    learning_rate = tf.placeholder(tf.float32)
-    is_training = tf.placeholder(tf.bool)
     batch_size = tf.placeholder(tf.int64)
+
+    is_training = tf.placeholder(tf.bool)
+    learning_rate = tf.placeholder(tf.float32)
+
 
     norm = tf.layers.batch_normalization(x, 1, training=is_training)
 
-    with tf.variable_scope('GEN'):
-        gfc = tf.layers.dense(norm, 4*4*512, activation=tf.nn.relu, kernel_initializer=tf.contrib.layers.xavier_initializer())
+    gimgs = generator(x, is_training)
 
-        gx = tf.reshape(gfc, (-1, 4, 4, 512))
-        gnorm = tf.layers.batch_normalization(gx, 1, training=is_training)
+    df_labels = discriminator(gimgs, is_training)
+    dt_labels = discriminator(y, is_training, reuse=True)
 
-        gconv = tf.layers.conv2d_transpose(gnorm, 256, 5, strides=2, padding='same', activation=tf.nn.relu)
-        gnorm = tf.layers.batch_normalization(gconv, 1, training=is_training)
+    f_labels = tf.zeros((batch_size))
+    t_labels = tf.ones((batch_size))
 
-        gconv = tf.layers.conv2d_transpose(gnorm, 128, 5, strides=2, padding='same', activation=tf.nn.relu)
-        gnorm = tf.layers.batch_normalization(gconv, 1, training=is_training)
+    gvars = [v for v in tf.global_variables() if v.name.startswith('GEN')]
+    dvars = [v for v in tf.global_variables() if v.name.startswith('DIS')]
 
-        gimg = tf.layers.conv2d_transpose(gnorm, 1, 5, strides=2, padding='same', activation=tf.nn.sigmoid)
+    f_loss = tf.reduce_mean(tf.reduce_sum(tf.losses.log_loss(f_labels, df_labels)))
+    t_loss = tf.reduce_mean(tf.reduce_sum(tf.losses.log_loss(t_labels, dt_labels)))
+    dloss = tf.add(f_loss, t_loss)
+    gloss = tf.negative(dloss)
 
-    false_labels = tf.zeros((batch_size))
-    true_labels = tf.ones((batch_size))
-    labels = tf.concat([false_labels, true_labels], axis=0)
-    labels = tf.random.shuffle(labels, random_seed)
-
-    imgs = tf.concat([gimg, y], axis=0)
-    imgs = tf.random.shuffle(imgs, random_seed)
-
-    with tf.variable_scope('DIS'):
-        dconv = tf.layers.conv2d(imgs, 64, 5, strides=2, padding='same', activation=tf.nn.relu)
-        dnorm = tf.layers.batch_normalization(dconv, 1, training=is_training)
-
-        dconv = tf.layers.conv2d(dnorm, 128, 5, strides=2, padding='same', activation=tf.nn.relu)
-        dnorm = tf.layers.batch_normalization(dconv, 1, training=is_training)
-
-        dconv = tf.layers.conv2d(dnorm, 256, 5, strides=2, padding='same', activation=tf.nn.relu)
-        dnorm = tf.layers.batch_normalization(dconv, 1, training=is_training)
-
-        flat = tf.reshape(tf.nn.relu(dnorm), (-1, 4*4*256))
-        out = tf.layers.dense(flat, 1, activation=tf.sigmoid)
+    gtrain_op = tf.train.AdamOptimizer(learning_rate).minimize(gloss, var_list=gvars)
+    dtrain_op = tf.train.AdamOptimizer(learning_rate).minimize(dloss, var_list=dvars)
 
 
-    gen_vars = [v for v in tf.global_variables() if v.name.startswith('GEN')]
-    dis_vars = [v for v in tf.global_variables() if v.name.startswith('DIS')]
+def train(sess, ix, iy, lr, epoch, bs=16):
+    batch = np.random.permutation(len(ix))
+    _gloss, _dloss = 0.0, 0.0
+    start = time.time()
+    for i in range(0, len(ix), bs):
+        bx = ix.take(batch[i:i + bs], axis=0)
+        by = iy.take(batch[i:i + bs], axis=0)
 
-    loss = tf.reduce_mean(tf.reduce_sum((out-labels)**2))
+        ret = sess.run(
+            [dtrain_op, dloss],
+            feed_dict={
+                x: bx,
+                y: by,
+                is_training: True,
+                learning_rate: lr,
+                batch_size: bs
+            }
+        )
+        _dloss += ret[1] * min(bs, len(ix) - i)
 
-    gen_train_op = tf.train.AdamOptimizer(learning_rate).minimize(-loss, var_list=gen_vars)
-    dis_train_op = tf.train.AdamOptimizer(learning_rate).minimize(loss, var_list=dis_vars)
+        ret = sess.run(
+            [gtrain_op, gloss],
+            feed_dict={
+                x: bx,
+                y: by,
+                is_training: True,
+                learning_rate: lr,
+                batch_size: bs
+            }
+        )
+        _gloss += ret[1] * min(bs, len(ix) - i)
+
+    if epoch % log_rate == 0:
+        print(
+            'epoch: %05d' % epoch,
+            'gloss: %07.3f' % _gloss,
+            'dloss: %07.3f' % _dloss,
+            'time: %07.3f' % (time.time() - start)
+        )
+
+dataset = load_dataset('data_part1', resize_img=(img_height, img_width))
+datay = dataset['train'][0].reshape((-1, img_height, img_width, img_channels))
+datax = np.random.randn(len(datay), 64)
+
+eprint(datax.shape, datay.shape)
+
+# tfwriter = tf.summary.FileWriter('logdir/gan', graph)
+
+with tf.Session(graph=graph) as session:
+    print('Inicializando variáveis...:', end=' ')
+    session.run(tf.global_variables_initializer())
+    print('Done')
+
+    for epoch in range(num_epochs):
+        train(session, datax, datay, 0.5, epoch)

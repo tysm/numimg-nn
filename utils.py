@@ -13,43 +13,90 @@ from sklearn.utils import shuffle
 
 # ML functions.
 
-def neuron_step(x: tf.Tensor, channels_in: int, channels_out: int, name: str = 'neuron') -> tf.Tensor:
-    """
-    Build a neuron and return a linear operation on x.
-
-    :param x: input.
-    :param channels_in: features dimension.
-    :param channels_out:  output dimension
-    :param name: scope name.
-    :return: linear operation on x.
-    """
-    with tf.name_scope(name):
-        # w = tf.Variable(
-        #     # tf.random_uniform((channels_in, channels_out), maxval=0.001),
-        #     tf.truncated_normal((channels_in, channels_out), stddev=0.1),
-        #     name='weight'
-        # )
-        w = tf.get_variable(
-            'weight',
-            shape=(channels_in, channels_out),
-            initializer=tf.contrib.layers.xavier_initializer()
+def generator(noise, is_training, reuse=False):
+    with tf.variable_scope('GEN', reuse=reuse):
+        fc = tf.layers.dense(
+            noise,
+            4*4*512,
+            activation=tf.nn.relu,
+            kernel_initializer=tf.contrib.layers.xavier_initializer()
         )
-        b = tf.Variable(
-            tf.zeros((channels_out,)),
-            # tf.constant(0.1, shape=(channels_out,)),
-            name='bias'
+        dp = tf.layers.dropout(fc, rate=0.2, training=is_training)
+
+        x = tf.reshape(dp, (-1, 4, 4, 512))
+        norm = tf.layers.batch_normalization(x, training=is_training)
+
+        conv = tf.layers.conv2d_transpose(
+            norm,
+            256,
+            5,
+            strides=2,
+            padding='same',
+            activation=tf.nn.relu
         )
-        a = tf.sigmoid(tf.matmul(x, w) + b)
-        # tf.summary.histogram('weights', w)
-        # tf.summary.histogram('biases', b)
-        # tf.summary.histogram('activation', a)
-        return a
+        norm = tf.layers.batch_normalization(conv, training=is_training)
+
+        conv = tf.layers.conv2d_transpose(
+            norm,
+            128,
+            5,
+            strides=2,
+            padding='same',
+            activation=tf.nn.relu
+        )
+        norm = tf.layers.batch_normalization(conv, training=is_training)
+
+        imgs = tf.layers.conv2d_transpose(
+            norm,
+            1,
+            5,
+            strides=2,
+            padding='same',
+            activation=tf.nn.sigmoid
+        )
+    return imgs
 
 
-def predict_to_file(results: list, paths_to_imgs: list, filename):
-    with open(filename, 'w') as out_file:
-        for i in range(len(results)):
-            out_file.write('{} {}\n'.format(paths_to_imgs[i], results[i]))
+def discriminator(x, is_training, reuse=False):
+    with tf.variable_scope('DIS', reuse=reuse):
+        conv = tf.layers.conv2d(
+            x,
+            64,
+            5,
+            strides=2,
+            padding='same',
+            activation=tf.nn.relu
+        )
+        norm = tf.layers.batch_normalization(conv, training=is_training)
+
+        conv = tf.layers.conv2d(
+            norm,
+            128,
+            5,
+            strides=2,
+            padding='same',
+            activation=tf.nn.relu
+        )
+        norm = tf.layers.batch_normalization(conv, training=is_training)
+
+        conv = tf.layers.conv2d(
+            norm,
+            256,
+            5,
+            strides=2,
+            padding='same',
+            activation=tf.nn.relu
+        )
+        norm = tf.layers.batch_normalization(conv, training=is_training)
+
+        flat = tf.reshape(norm, (-1, 4*4*256))
+        out = tf.layers.dense(
+            flat,
+            1,
+            activation=tf.sigmoid,
+            kernel_initializer=tf.contrib.layers.xavier_initializer()
+        )
+    return out
 
 
 # Help functions.
@@ -88,8 +135,8 @@ def get_dataset(url: str, filename: str):
 
 
 def load_dataset(path_to_dataset: str, cv_flag: str=f'IMREAD_GRAYSCALE', x_dtype: np.dtype=np.float32,
-                 y_dtype: np.dtype=np.int64, training_percentage: float=0.8, seed: int=7,
-                 resize_img: Tuple[int, int]=None, perform_augmentation: bool=False) -> dict:
+                 y_dtype: np.dtype=np.int64, training_percentage: float=1, seed: int=7,
+                 resize_img: Tuple[int, int]=None) -> dict:
     """
     Load a dataset in the format:
         "
@@ -138,48 +185,6 @@ def load_dataset(path_to_dataset: str, cv_flag: str=f'IMREAD_GRAYSCALE', x_dtype
     x_train, y_train = x[:int(len(x) * training_percentage)], y[:int(len(y) * training_percentage)]
     x_valid, y_valid = x[int(len(x) * training_percentage):], y[int(len(y) * training_percentage):]
 
-    if perform_augmentation:
-        rows, cols = x_train[0].shape[:2]
-
-        M = cv.getRotationMatrix2D(((cols-1)/2.0, (rows-1)/2.0), 0, 1.10)
-        scaling_imgs = - len(x_train)
-        for i in range(len(x_train)):
-            img = cv.warpAffine(x_train[i], M, (cols, rows))
-            if not is_valid_img(img):
-                continue
-            x_train.append(img)
-            y_train.append(y_train[i])
-        scaling_imgs += len(x_train)
-        eprint('scaling_imgs={}'.format(scaling_imgs))
-
-        clock_M = cv.getRotationMatrix2D(((cols-1)/2.0, (rows-1)/2.0), -5, 1)
-        anti_M = cv.getRotationMatrix2D(((cols-1)/2.0, (rows-1)/2.0), 5, 1)
-        rotated_imgs = - len(x_train)
-        for i in range(len(x_train)):
-            img = cv.warpAffine(x_train[i], clock_M, (cols, rows))
-            if is_valid_img(img):
-                x_train.append(img)
-                y_train.append(y_train[i])
-
-            img = cv.warpAffine(x_train[i], anti_M, (cols, rows))
-            if not is_valid_img(img):
-                continue
-            x_train.append(img)
-            y_train.append(y_train[i])
-        rotated_imgs += len(x_train)
-        eprint('rotated_imgs={}'.format(rotated_imgs))
-
-        M = np.float32([[1, 0, 0], [0, 1, 4]])
-        translated_imgs = - len(x_train)
-        for i in range(len(x_train)):
-            img = cv.warpAffine(x_train[i], M, (cols, rows))
-            if not is_valid_img(img):
-                continue
-            x_train.append(img)
-            y_train.append(y_train[i])
-        translated_imgs += len(x_train)
-        eprint('translated_imgs={}'.format(translated_imgs))
-
     x_train, y_train = np.array(x_train, dtype=x_dtype), np.array(y_train, dtype=y_dtype)
     x_valid, y_valid = np.array(x_valid, dtype=x_dtype), np.array(y_valid, dtype=y_dtype)
 
@@ -204,17 +209,3 @@ def load_dataset(path_to_dataset: str, cv_flag: str=f'IMREAD_GRAYSCALE', x_dtype
         'test': (x_test, path_to_test, imgnames)
     }
     return dataset
-
-def is_valid_img(img: np.ndarray):
-    rows, cols = img.shape[:2]
-    if any(i > 127.0 for i in img[0]):
-        return False
-    if any(i > 127.0 for i in img[-1]):
-        return False
-    if any(i > 127.0 for i in img[:,0]):
-        return False
-    if any(i > 127.0 for i in img[:,-1]):
-        return False
-    if any(i > 127.0 for i in img.reshape(-1)):
-        return True
-    return False
