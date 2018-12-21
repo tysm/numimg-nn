@@ -41,7 +41,7 @@ def generator(noise, dp_rate, is_training, reuse=False):
         print(dp.shape)
 
         conv = tf.layers.conv2d_transpose(
-            norm,
+            dp,
             32,
             5,
             strides=2,
@@ -53,7 +53,7 @@ def generator(noise, dp_rate, is_training, reuse=False):
         print(dp.shape)
 
         conv = tf.layers.conv2d_transpose(
-            norm,
+            dp,
             16,
             5,
             strides=2,
@@ -65,7 +65,7 @@ def generator(noise, dp_rate, is_training, reuse=False):
         print(dp.shape)
 
         imgs = tf.layers.conv2d_transpose(
-            norm,
+            dp,
             1,
             5,
             strides=2,
@@ -96,6 +96,7 @@ def discriminator(x, dp_rate, is_training, reuse=False):
             dp,
             32,
             5,
+            strides=2,
             padding='same',
             activation=lrelu
         )
@@ -106,6 +107,7 @@ def discriminator(x, dp_rate, is_training, reuse=False):
             dp,
             64,
             5,
+            strides=2,
             padding='same',
             activation=lrelu
         )
@@ -116,6 +118,7 @@ def discriminator(x, dp_rate, is_training, reuse=False):
             dp,
             128,
             5,
+            strides=2,
             padding='same',
             activation=lrelu
         )
