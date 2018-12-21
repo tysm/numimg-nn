@@ -472,8 +472,11 @@ pip-selfcheck.json
 # End of https://www.gitignore.io/api/latex,python,pycharm
 
 
-# Dataset archives:
-data*
+# Data archives:
+mnist*
+logs*
+models*
+*.zip
 *.txt
 
 # Stuff

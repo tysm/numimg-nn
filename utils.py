@@ -1,9 +1,8 @@
 import os
 import sys
 import time
-import tarfile
+import zipfile
 from urllib.request import urlretrieve
-from typing import Tuple
 
 import cv2 as cv
 import numpy as np
@@ -18,67 +17,90 @@ def lrelu(x, alpha=0.2):
 
 
 def generator(noise, dp_rate, is_training, reuse=False):
+    iprint('GEN')
+    print(noise.shape)
     with tf.variable_scope('GEN', reuse=reuse):
-        fc = tf.layers.dense(noise, 4*4*512, activation=lrelu)
-        dp = tf.layers.dropout(fc, dp_rate, training=is_training)
-        norm = tf.layers.batch_normalization(dp, training=is_training)
+        noise = tf.layers.dense(noise, 4*4*128, activation=lrelu)
+        norm = tf.layers.batch_normalization(noise, training=is_training)
+        dp = tf.layers.dropout(norm, dp_rate, training=is_training)
+        print(dp.shape)
 
-        x = tf.reshape(norm, (-1, 4, 4, 512))
+        noise = tf.reshape(dp, (-1, 4, 4, 128))
+        print(noise.shape)
 
         conv = tf.layers.conv2d_transpose(
-            x,
+            noise,
             64,
             5,
             strides=2,
             padding='same',
             activation=lrelu
         )
-        dp = tf.layers.dropout(conv, dp_rate, training=is_training)
-        norm = tf.layers.batch_normalization(dp, training=is_training)
-
-        conv = tf.layers.conv2d_transpose(
-            norm,
-            64,
-            5,
-            strides=2,
-            padding='same',
-            activation=lrelu
-        )
-        dp = tf.layers.dropout(conv, dp_rate, training=is_training)
-        norm = tf.layers.batch_normalization(dp, training=is_training)
+        norm = tf.layers.batch_normalization(conv, training=is_training)
+        dp = tf.layers.dropout(norm, dp_rate, training=is_training)
+        print(dp.shape)
 
         conv = tf.layers.conv2d_transpose(
             norm,
-            64,
+            32,
             5,
             strides=2,
             padding='same',
             activation=lrelu
         )
-        dp = tf.layers.dropout(conv, dp_rate, training=is_training)
-        norm = tf.layers.batch_normalization(dp, training=is_training)
+        norm = tf.layers.batch_normalization(conv, training=is_training)
+        dp = tf.layers.dropout(norm, dp_rate, training=is_training)
+        print(dp.shape)
+
+        conv = tf.layers.conv2d_transpose(
+            norm,
+            16,
+            5,
+            strides=2,
+            padding='same',
+            activation=lrelu
+        )
+        norm = tf.layers.batch_normalization(conv, training=is_training)
+        dp = tf.layers.dropout(norm, dp_rate, training=is_training)
+        print(dp.shape)
 
         imgs = tf.layers.conv2d_transpose(
             norm,
             1,
             5,
+            strides=2,
             padding='same',
             activation=tf.nn.sigmoid
         )
+        print(imgs.shape)
+    print()
     return imgs
 
 
 def discriminator(x, dp_rate, is_training, reuse=False):
+    iprint('DIS')
+    print(x.shape)
     with tf.variable_scope('DIS', reuse=reuse):
         conv = tf.layers.conv2d(
             x,
-            64,
+            16,
             5,
             strides=2,
             padding='same',
             activation=lrelu
         )
         dp = tf.layers.dropout(conv, dp_rate, training=is_training)
+        print(dp.shape)
+
+        conv = tf.layers.conv2d(
+            dp,
+            32,
+            5,
+            padding='same',
+            activation=lrelu
+        )
+        dp = tf.layers.dropout(conv, dp_rate, training=is_training)
+        print(dp.shape)
 
         conv = tf.layers.conv2d(
             dp,
@@ -88,90 +110,99 @@ def discriminator(x, dp_rate, is_training, reuse=False):
             activation=lrelu
         )
         dp = tf.layers.dropout(conv, dp_rate, training=is_training)
+        print(dp.shape)
 
         conv = tf.layers.conv2d(
             dp,
-            64,
+            128,
             5,
             padding='same',
             activation=lrelu
         )
         dp = tf.layers.dropout(conv, dp_rate, training=is_training)
+        print(dp.shape)
 
         flat = tf.layers.flatten(dp)
-        fc = tf.layers.dense(flat, 128, activation=lrelu)
+        fc = tf.layers.dense(flat, 4*4*128, activation=lrelu)
+        print(fc.shape)
+
         out = tf.layers.dense(fc, 1, activation=tf.sigmoid)
+        print(out.shape)
+    print()
     return out
 
 
 # Help functions.
 
-def eprint(*args, **kwargs):
-    """
-    Print to stderr.
+def iprint(*args, **kwargs):
+    """Print INFO
 
-    :param args: args to print.
-    :param kwargs: kwargs to print.
+    :param *args: *args.
+    :param **kwargs: **kwargs.
     :return:
     """
-    print('INFO:', *args, file=sys.stderr, **kwargs)
+
+    print('INFO:', *args, **kwargs)
 
 
-def get_dataset(url: str, filename: str):
-    """
-    Download and extract the archive from url.
+def get_dataset(url, filename):
+    """Download and extract the archive from @url
 
-    :param url: archive url.
-    :param filename: tar.bz2 archive filename.
+    :param url: zipped dataset url.
+    :param filename: zipped dataset filename.
     :return:
     """
+
     if not os.path.exists(filename):
-        eprint(filename, 'not found')
-        eprint('downloading', filename)
+        iprint(filename, 'not found')
+        iprint('downloading', filename)
         start = time.time()
-        filename, headers = urlretrieve(url, filename)
-        eprint('download completed - %f.5' % (time.time() - start))
+        filename, _ = urlretrieve(url, filename)
+        iprint('download completed - %f.5' % (time.time() - start))
 
-    eprint('extracting', filename)
+    iprint('extracting', filename)
     start = time.time()
-    with tarfile.open(filename, 'r:bz2') as tarbz2file:
-        tarbz2file.extractall()
-    eprint('extraction completed - %f.5' % (time.time() - start))
+    with zipfile.ZipFile(filename, 'r') as zip_ref:
+        zip_ref.extractall()
+    iprint('extraction completed - %f.5' % (time.time() - start))
 
 
-def load_dataset(path_to_dataset: str, cv_flag: str=f'IMREAD_GRAYSCALE', x_dtype: np.dtype=np.float32,
-                 y_dtype: np.dtype=np.int64, training_percentage: float=1, seed: int=7,
-                 resize_img: Tuple[int, int]=None) -> dict:
-    """
-    Load a dataset in the format:
-        "
-            path_to_dataset/
-                train/
-                    label0/
-                        img0
-                        ...
-                    ...
-                test/
-                    img0
-                    ...
-        "
+def load_dataset(path_to_dataset, x_dtype=np.float32, y_dtype=np.int64,
+                 cv_flag=f'IMREAD_GRAYSCALE', resize_img=None,
+                 training_percentage=0.8, seed=None):
+    """Load a MNIST dataset
+
+    The dataset should be in the format:
+    ---
+    path_to_dataset/
+        labeled/
+            label0/
+                img0
+                ...
+            ...
+        unlabeled/
+            img0
+            ...
+    ---
+    Where the labels are numbers.
 
     :param path_to_dataset: the dataset path.
-    :param cv_flag: specifies how images should be read.
     :param x_dtype: specifies wich type x values should be.
     :param y_dtype: specifies wich type y values should be.
+    :param cv_flag: specifies how images should be read.
+    :param resize_img: image final size (img_width, img_height).
     :param training_percentage: percentage for the train_set.
     :param seed: a shuffle seed.
-    :param resize_img: resize (img_width, img_height)
-    :param perform_augmentation: if True, performs augmentation on training set.
     :return: the dataset.
     """
+
+    # Read labeled data.
     x, y = [], []
-    path_to_train = os.path.join(path_to_dataset, 'train')
-    classes = sorted(os.listdir(path_to_train))
+    path_to_labeled = os.path.join(path_to_dataset, 'labeled')
+    classes = sorted(os.listdir(path_to_labeled))
     for label in classes:
         acc = []
-        path_to_label = os.path.join(path_to_train, label)
+        path_to_label = os.path.join(path_to_labeled, label)
         for imgname in sorted(os.listdir(path_to_label)):
             path_to_img = os.path.join(path_to_label, imgname)
             img = cv.imread(path_to_img, getattr(cv, cv_flag))
@@ -184,20 +215,30 @@ def load_dataset(path_to_dataset: str, cv_flag: str=f'IMREAD_GRAYSCALE', x_dtype
         x.extend(acc)
         y.extend([int(label)] * len(acc))
 
-    # x, y = shuffle(np.array(x, dtype=x_dtype), np.array(y, dtype=y_dtype), random_state=seed)
+    # Shuffle both in the same way.
     x, y = shuffle(x, y, random_state=seed)
 
-    x_train, y_train = x[:int(len(x) * training_percentage)], y[:int(len(y) * training_percentage)]
-    x_valid, y_valid = x[int(len(x) * training_percentage):], y[int(len(y) * training_percentage):]
+    # Split the labeled data into train and valid.
+    x_train = x[:int(len(x) * training_percentage)]
+    x_valid = x[int(len(x) * training_percentage):]
 
-    x_train, y_train = np.array(x_train, dtype=x_dtype), np.array(y_train, dtype=y_dtype)
-    x_valid, y_valid = np.array(x_valid, dtype=x_dtype), np.array(y_valid, dtype=y_dtype)
+    y_train = y[:int(len(y) * training_percentage)]
+    y_valid = y[int(len(y) * training_percentage):]
 
+    # Convert into numpy array.
+    x_train = np.array(x_train, dtype=x_dtype)
+    x_valid = np.array(x_valid, dtype=x_dtype)
+
+    y_train = np.array(y_train, dtype=y_dtype)
+    y_valid = np.array(y_valid, dtype=y_dtype)
+
+
+    # Read unlabeled data.
     x_test = []
     imgnames = []
-    path_to_test = os.path.join(path_to_dataset, 'test')
-    for imgname in sorted(os.listdir(path_to_test)):
-        path_to_img = os.path.join(path_to_test, imgname)
+    path_to_unlabeled = os.path.join(path_to_dataset, 'unlabeled')
+    for imgname in sorted(os.listdir(path_to_unlabeled)):
+        path_to_img = os.path.join(path_to_unlabeled, imgname)
         img = cv.imread(path_to_img, getattr(cv, cv_flag))
 
         if resize_img is not None:
@@ -205,12 +246,16 @@ def load_dataset(path_to_dataset: str, cv_flag: str=f'IMREAD_GRAYSCALE', x_dtype
 
         x_test.append(img)
         imgnames.append(imgname)
+
+    # Convert into numpy array.
     x_test = np.array(x_test, dtype=x_dtype)
 
+    # Final dataset format.
     dataset = {
         'classes': classes,
         'train': (x_train, y_train),
         'valid': (x_valid, y_valid),
-        'test': (x_test, path_to_test, imgnames)
+        'test': (x_test, path_to_unlabeled, imgnames)
     }
     return dataset
+

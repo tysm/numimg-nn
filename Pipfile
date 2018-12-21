@@ -9,6 +9,7 @@ verify_ssl = true
 sklearn = "*"
 tensorflow = "*"
 opencv-python = "*"
+jupyter = "*"
 
 [requires]
 python_version = "3.6"
